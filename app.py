@@ -110,23 +110,21 @@ def build_streamlit_ui():
         st.markdown("**KARL, BU**")
 
     # ------------------- SIDEBAR -------------------
-    st.sidebar.title("Controls")
-    
-    uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
+st.sidebar.title("Controls")
 
-    fits_url = st.sidebar.text_input("FITS file URL")
-    if st.sidebar.button("Download FITS") and fits_url:
-        try:
-            r = requests.get(fits_url); r.raise_for_status()
-            filename = fits_url.split("/")[-1]
-            st.session_state.setdefault('loaded', {})[filename] = load_fits_data(io.BytesIO(r.content))
-            st.success(f"Downloaded and loaded {filename}")
-        except Exception as e:
-            st.error(f"Download failed: {e}")
+uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
 
-     # Visualization & processing options
-    general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
-    # Visualization & processing options
+fits_url = st.sidebar.text_input("FITS file URL")
+if st.sidebar.button("Download FITS") and fits_url:
+    try:
+        r = requests.get(fits_url); r.raise_for_status()
+        filename = fits_url.split("/")[-1]
+        st.session_state.setdefault('loaded', {})[filename] = load_fits_data(io.BytesIO(r.content))
+        st.success(f"Downloaded and loaded {filename}")
+    except Exception as e:
+        st.error(f"Download failed: {e}")
+
+# ------------------- Visualization & Processing Options -------------------
 general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
 
 with general_tab:
@@ -142,10 +140,7 @@ with export_tab:
     out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
     dpi = st.number_input("DPI", 72, 1200, 300)
 
-tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
-st.session_state.setdefault('loaded', {})
-
-# Authors in sidebar
+# ------------------- AUTHORS / CONTRIBUTORS -------------------
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Authors & Contributors:**")
 st.sidebar.markdown("""
@@ -158,34 +153,6 @@ Shahariar Emon (Domain Expert)
 Dr. Md. Khorshed Alam (Supervisor)
 """)
 
-    with general_tab:
-        show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
-        default_cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
-        default_stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0)
-    
-    with processing_tab:
-        enable_bgsub = st.checkbox("Background subtraction")
-        enable_denoise = st.checkbox("Noise reduction (Gaussian)")
-    
-    with export_tab:
-        out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
-        dpi = st.number_input("DPI", 72, 1200, 300)
-
-    tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
-    st.session_state.setdefault('loaded', {})
-
-      # Authors in sidebar
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("**Authors & Contributors:**")
-        st.sidebar.markdown("""
-    Rayhan Miah (App Developer)  
-    Israt Jahan Powsi (App Developer)  
-    Al Amin (QC Test)  
-    Pranto Das (QC Test)  
-    Abdul Hafiz Tamim (Image processing Dev)  
-    Shahariar Emon (Domain Expert)  
-    Dr. Md. Khorshed Alam (Supervisor)
-    """)
 
     # ------------------- UPLOAD TAB -------------------
     with tabs[0]:
