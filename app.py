@@ -106,7 +106,7 @@ def build_streamlit_ui():
         except:
             st.write("Logo not found")
     with col2:
-        st.title("FITS Converter & Visualizer 🔭")
+        st.title("FITS Converter & Visualizer [RAYsi]")
         st.markdown("**KARL, BU**")
 
     # ------------------- SIDEBAR -------------------
@@ -124,20 +124,7 @@ def build_streamlit_ui():
         except Exception as e:
             st.error(f"Download failed: {e}")
 
-    # Authors in sidebar
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("**Authors & Contributors:**")
-    st.sidebar.markdown("""
-Rayhan Miah (App Developer)  
-Israt Jahan Powsi (App Developer)  
-Al Amin (QC Test)  
-Pranto Das (QC Test)  
-Abdul Hafiz Tamim (Image processing Dev)  
-Shahariar Emon (Domain Expert)  
-Dr. Md. Khorshed Alam (Supervisor)
-""")
-
-    # Visualization & processing options
+     # Visualization & processing options
     general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
     
     with general_tab:
@@ -155,6 +142,19 @@ Dr. Md. Khorshed Alam (Supervisor)
 
     tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
     st.session_state.setdefault('loaded', {})
+
+       # Authors in sidebar
+      st.sidebar.markdown("---")
+      st.sidebar.markdown("**Authors & Contributors:**")
+      st.sidebar.markdown("""
+  Rayhan Miah (App Developer)  
+  Israt Jahan Powsi (App Developer)  
+  Al Amin (QC Test)  
+  Pranto Das (QC Test)  
+  Abdul Hafiz Tamim (Image processing Dev)  
+  Shahariar Emon (Domain Expert)  
+  Dr. Md. Khorshed Alam (Supervisor)
+  """)
 
     # ------------------- UPLOAD TAB -------------------
     with tabs[0]:
