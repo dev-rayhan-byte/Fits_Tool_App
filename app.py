@@ -271,14 +271,24 @@ def build_streamlit_ui():
                 hdr = hdul[hdu_idx].header
                 # basic processing controls
                 stretch = st.selectbox("Stretch", ["linear", "log", "sqrt", "asinh"], index=0)
+                # Ensure we have a 2D image to display
+                arr = np.array(data)
+                if arr.ndim > 2:
+                    st.warning(f"HDU {hdu_idx} has {arr.ndim} dimensions — displaying the first slice along axis 0.")
+                    arr = arr[0]
+                if arr.ndim < 2:
+                    st.error(f"HDU {hdu_idx} has invalid shape {arr.shape} for image display.")
+                    continue
                 percent = st.slider("Stretch percentile", 90.0, 100.0, 99.5)
                 cmap = st.selectbox("Colormap", ["gray", "viridis", "inferno", "magma", "plasma", "cividis"], index=0)
                 rotate = st.selectbox("Rotate", ["0", "90", "180", "270"], index=0)
                 do_crop = st.checkbox("Enable crop tool")
-                # build norm and display
-                norm = normalize_image(data, stretch=stretch, percent=percent)
+                # build norm and display (using the 2D array 'arr')
+                norm = normalize_image(arr, stretch=stretch, percent=percent)
                 # Apply rotation
-                arr = np.array(data)
+                if rotate != "0":
+                    k = int(int(rotate) / 90)
+                    arr = np.rot90(arr, k=k)
                 if rotate != "0":
                     k = int(int(rotate) / 90)
                     arr = np.rot90(arr, k=k)
@@ -325,6 +335,12 @@ def build_streamlit_ui():
             if image_hdus:
                 hdu_idx = st.selectbox("Image HDU (proc)", options=image_hdus)
                 arr = np.array(hdul[hdu_idx].data)
+                if arr.ndim > 2:
+                    st.warning(f"HDU {hdu_idx} has {arr.ndim} dimensions — using first slice for processing.")
+                    arr = arr[0]
+                if arr.ndim < 2:
+                    st.error(f"HDU {hdu_idx} has invalid shape {arr.shape} for processing.")
+                    continue
                 # histogram
                 fig, ax = plt.subplots()
                 ax.hist(arr.flatten(), bins=256, log=True)
@@ -356,6 +372,11 @@ def build_streamlit_ui():
                     if not image_hdus:
                         continue
                     arr = np.array(hdul[image_hdus[0]].data)
+                    if arr.ndim > 2:
+                        arr = arr[0]
+                    if arr.ndim < 2:
+                        # skip non-image HDU
+                        continue
                     norm = normalize_image(arr, stretch=default_stretch)
                     pil_img = array_to_pil(arr, cmap=default_cmap, norm=norm)
                     buf = io.BytesIO(); pil_img.save(buf, format=fmt); buf.seek(0)
@@ -364,7 +385,7 @@ def build_streamlit_ui():
             st.download_button("Download ZIP", data=out_zip_buf, file_name="converted_images.zip", mime='application/zip')
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("Made with  for astronomers — supports FITS metadata, visualization, conversion, and basic processing.")
+    st.sidebar.caption("Made with ❤️ for astronomers — supports FITS metadata, visualization, conversion, and basic processing.")
 
 # ------------------------- Headless CLI functions -------------------------
 
@@ -382,6 +403,11 @@ def batch_convert(input_patterns: List[str], outdir: str, out_format: str = 'png
                 print(f"No image HDU in {fp}, skipping")
                 continue
             arr = np.array(hdul[image_hdus[0]].data)
+            if arr.ndim > 2:
+                arr = arr[0]
+            if arr.ndim < 2:
+                print(f"No 2D image in {fp}, skipping")
+                continue
             norm = normalize_image(arr, stretch='asinh')
             pil_img = array_to_pil(arr, cmap='gray', norm=norm)
             out_file = os.path.join(outdir, f"{os.path.splitext(os.path.basename(fp))[0]}.{out_format}")
@@ -405,6 +431,10 @@ def build_api():
         if not image_hdus:
             return {"error": "no image HDU"}
         arr = np.array(hdul[image_hdus[0]].data)
+        if arr.ndim > 2:
+            arr = arr[0]
+        if arr.ndim < 2:
+            return {"error": "no 2D image HDU"}
         norm = normalize_image(arr, stretch='asinh')
         pil_img = array_to_pil(arr, cmap='gray', norm=norm)
         buf = io.BytesIO(); pil_img.save(buf, format=fmt.upper()); buf.seek(0)
