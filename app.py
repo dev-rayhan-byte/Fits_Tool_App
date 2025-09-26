@@ -91,7 +91,7 @@ def build_streamlit_ui():
     st.set_page_config(page_title="FITS Converter & Visualizer", layout="wide")
     st.session_state.setdefault('loaded', {})
 
-    # Header
+    # ------------------- HEADER -------------------
     col1, col2 = st.columns([1,6])
     with col1:
         try:
@@ -103,7 +103,7 @@ def build_streamlit_ui():
         st.title("FITS Converter & Visualizer 🔭")
         st.markdown("**KARL, BU**")
 
-    # Sidebar: Upload & URL
+    # ------------------- SIDEBAR -------------------
     st.sidebar.title("Controls")
     uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
     fits_url = st.sidebar.text_input("FITS file URL")
@@ -116,7 +116,6 @@ def build_streamlit_ui():
         except Exception as e:
             st.error(f"Download failed: {e}")
 
-    # Options
     general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
     with general_tab:
         show_wcs = st.checkbox("Show WCS / RA-Dec", True)
@@ -129,10 +128,10 @@ def build_streamlit_ui():
         out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
         dpi = st.number_input("DPI", 72, 1200, 300)
 
-    # Tabs
+    # ------------------- MAIN TABS -------------------
     tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
 
-    # ------------------- UPLOAD TAB -------------------
+    # ------------------- UPLOAD -------------------
     with tabs[0]:
         st.subheader("Uploaded FITS Files")
         if uploaded:
@@ -147,7 +146,7 @@ def build_streamlit_ui():
         elif not st.session_state['loaded']:
             st.info("Upload FITS files via drag-and-drop or URL.")
 
-    # ------------------- METADATA TAB -------------------
+    # ------------------- METADATA -------------------
     with tabs[1]:
         st.subheader("FITS Header & Metadata")
         if st.session_state['loaded']:
@@ -161,7 +160,7 @@ def build_streamlit_ui():
                 if missing: st.warning(f"Missing keywords: {missing}")
                 else: st.success("All required keywords present.")
 
-    # ------------------- VISUALIZATION TAB -------------------
+    # ------------------- VISUALIZATION -------------------
     with tabs[2]:
         st.subheader("Image Viewer")
         if st.session_state['loaded']:
@@ -196,7 +195,7 @@ def build_streamlit_ui():
                 else:
                     st.warning("No image HDUs available.")
 
-    # ------------------- HISTOGRAM TAB -------------------
+    # ------------------- HISTOGRAM -------------------
     with tabs[3]:
         st.subheader("Histogram & Interactive Stretch")
         if st.session_state['loaded']:
@@ -213,7 +212,7 @@ def build_streamlit_ui():
                     ax.set_title(f"Histogram: {file} [HDU {hdu_idx}]")
                     st.pyplot(fig)
 
-    # ------------------- RGB COMPOSITE TAB -------------------
+    # ------------------- RGB COMPOSITE -------------------
     with tabs[4]:
         st.subheader("RGB Composite from 3 FITS files")
         files = st.multiselect("Select 3 FITS files", list(st.session_state['loaded'].keys()))
@@ -235,7 +234,7 @@ def build_streamlit_ui():
         else:
             st.info("Select exactly 3 FITS files.")
 
-    # ------------------- APERTURE PHOTOMETRY TAB -------------------
+    # ------------------- APERTURE PHOTOMETRY -------------------
     with tabs[5]:
         st.subheader("Aperture Photometry")
         if CircularAperture is None:
@@ -256,7 +255,7 @@ def build_streamlit_ui():
                     phot_table = aperture_photometry(arr, aperture)
                     st.write(phot_table)
 
-    # ------------------- EXPORT TAB -------------------
+    # ------------------- EXPORT -------------------
     with tabs[6]:
         st.subheader("Export FITS HDU as Image")
         if st.session_state['loaded']:
@@ -271,3 +270,54 @@ def build_streamlit_ui():
                     img = array_to_pil(arr, cmap=default_cmap, norm=normalize_image(arr, stretch=default_stretch))
                     buf = save_image_pil(img, fmt=out_format, dpi=dpi)
                     st.download_button("Download Image", buf, file_name=f"{file}_HDU{hdu_idx}.{out_format.lower()}")
+
+    # ------------------- FOOTER -------------------
+    st.markdown("---")
+    st.markdown("**Authors & Contributors:**")
+    st.markdown("""
+    1. Rayhan Miah (App Developer)  
+    2. Israt Jahan Powsi (App Developer)  
+    3. Al Amin (QC Test)  
+    4. Pranto Das (QC Test)  
+    5. Abdul Hafiz Tamim (Image processing Dev)  
+    6. Shahariar Emon (Domain Expert)  
+    7. Dr. Md. Khorshed Alam (Supervisor)
+    """)
+
+# ------------------- MAIN ENTRY -------------------
+
+def main():
+    parser = argparse.ArgumentParser(description="FITS Converter & Visualizer")
+    parser.add_argument("--cli-convert", action="store_true", help="CLI batch convert FITS to images")
+    parser.add_argument("--input", nargs="+", help="Input FITS files")
+    parser.add_argument("--outdir", default=".", help="Output directory")
+    parser.add_argument("--format", default="png", help="Output format")
+    parser.add_argument("--dpi", type=int, default=300, help="DPI")
+    parser.add_argument("--api", action="store_true", help="Start REST API")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    # CLI conversion
+    if args.cli_convert:
+        if not args.input: raise RuntimeError("No input files for CLI")
+        os.makedirs(args.outdir, exist_ok=True)
+        for f in args.input:
+            hdul = load_fits_data(f)
+            for i,hdu in enumerate(hdul):
+                if getattr(hdu,'data',None) is not None and hdu.data.ndim>=2:
+                    arr = np.array(hdu.data)
+                    if arr.ndim>2: arr=arr[0]
+                    img = array_to_pil(arr)
+                    out_path = os.path.join(args.outdir, f"{os.path.basename(f)}_HDU{i}.{args.format.lower()}")
+                    save_image_pil(img, fmt=args.format, dpi=args.dpi, out_path=out_path)
+                    print(f"Saved {out_path}")
+        return
+
+    if st:
+        build_streamlit_ui()
+    else:
+        print("Streamlit not installed. Use --cli-convert mode.")
+
+if __name__ == "__main__":
+    main()
