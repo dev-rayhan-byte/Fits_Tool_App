@@ -224,7 +224,84 @@ Dr. Md. Khorshed Alam (Supervisor)
 
     # ------------------- Continue other tabs (Histogram, RGB, Photometry, Export) ---
     # You can continue your previous code here as before.
+    # ----------------- HISTOGRAM -----------------
+with tabs[3]:
+    st.subheader("Histogram")
+    if st.session_state['loaded']:
+        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='hist_file')
+        hdul = st.session_state['loaded'][file]
+        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+        if img_hdus:
+            hdu_idx = img_hdus[0]
+            arr = np.array(hdul[hdu_idx].data)
+            if arr.ndim>2: arr = arr[0]
+            fig, ax = plt.subplots()
+            ax.hist(arr.flatten(), bins=256, color='gray')
+            ax.set_title(f"Histogram: {file} [HDU {hdu_idx}]")
+            ax.set_xlabel("Pixel Value")
+            ax.set_ylabel("Count")
+            st.pyplot(fig)
 
+# ----------------- RGB COMPOSITE -----------------
+with tabs[4]:
+    st.subheader("RGB Composite from 3 FITS files")
+    files = st.multiselect("Select 3 FITS files", list(st.session_state['loaded'].keys()), key='rgb_files')
+    if len(files) == 3:
+        arrs = []
+        for f in files:
+            hdul = st.session_state['loaded'][f]
+            img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+            arr = np.array(hdul[img_hdus[0]].data)
+            if arr.ndim>2: arr = arr[0]
+            arrs.append((arr - np.nanmin(arr)) / (np.nanmax(arr) - np.nanmin(arr)))
+        rgb = np.dstack(arrs)
+        fig, ax = plt.subplots(figsize=(6,6))
+        ax.imshow(rgb, origin='lower')
+        ax.set_title("RGB Composite")
+        ax.axis('off')
+        st.pyplot(fig)
+    else:
+        st.info("Select exactly 3 FITS files.")
+
+# ----------------- APERTURE PHOTOMETRY -----------------
+with tabs[5]:
+    st.subheader("Aperture Photometry")
+    if CircularAperture is None:
+        st.warning("photutils not installed. Aperture photometry disabled.")
+    elif st.session_state['loaded']:
+        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='phot_file')
+        hdul = st.session_state['loaded'][file]
+        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+        if img_hdus:
+            arr = np.array(hdul[img_hdus[0]].data)
+            if arr.ndim>2: arr = arr[0]
+            x = st.number_input("X", 0, arr.shape[1]-1, int(arr.shape[1]/2))
+            y = st.number_input("Y", 0, arr.shape[0]-1, int(arr.shape[0]/2))
+            r = st.number_input("Radius", 1, min(arr.shape)//2, 5)
+            aperture = CircularAperture((x,y), r)
+            phot_table = aperture_photometry(arr, aperture)
+            st.write(phot_table)
+            fig, ax = plt.subplots(figsize=(6,6))
+            ax.imshow(arr, origin='lower', cmap='gray')
+            aperture.plot(color='red', lw=1.5, ax=ax)
+            ax.set_title("Aperture Photometry")
+            st.pyplot(fig)
+
+# ----------------- EXPORT -----------------
+with tabs[6]:
+    st.subheader("Export Images")
+    if st.session_state['loaded']:
+        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='export_file')
+        hdul = st.session_state['loaded'][file]
+        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+        if img_hdus:
+            arr = np.array(hdul[img_hdus[0]].data)
+            if arr.ndim>2: arr = arr[0]
+            norm = normalize_image(arr)
+            img = array_to_pil(arr, cmap=default_cmap, norm=norm)
+            buf = save_image_pil(img, fmt=out_format, dpi=dpi)
+            st.download_button(f"Download {out_format}", data=buf, file_name=f"{file}.{out_format.lower()}")
+✅ Important fixes:
 # ====================== MAIN ======================
 if __name__ == "__main__" and st is not None:
     build_streamlit_ui()
