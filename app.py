@@ -143,18 +143,18 @@ def build_streamlit_ui():
     tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
     st.session_state.setdefault('loaded', {})
 
-    # Authors in sidebar
-      st.sidebar.markdown("---")
-      st.sidebar.markdown("**Authors & Contributors:**")
-      st.sidebar.markdown("""
-  Rayhan Miah (App Developer)  
-  Israt Jahan Powsi (App Developer)  
-  Al Amin (QC Test)  
-  Pranto Das (QC Test)  
-  Abdul Hafiz Tamim (Image processing Dev)  
-  Shahariar Emon (Domain Expert)  
-  Dr. Md. Khorshed Alam (Supervisor)
-  """)
+      # Authors in sidebar
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**Authors & Contributors:**")
+        st.sidebar.markdown("""
+    Rayhan Miah (App Developer)  
+    Israt Jahan Powsi (App Developer)  
+    Al Amin (QC Test)  
+    Pranto Das (QC Test)  
+    Abdul Hafiz Tamim (Image processing Dev)  
+    Shahariar Emon (Domain Expert)  
+    Dr. Md. Khorshed Alam (Supervisor)
+    """)
 
     # ------------------- UPLOAD TAB -------------------
     with tabs[0]:
