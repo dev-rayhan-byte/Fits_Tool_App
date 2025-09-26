@@ -301,7 +301,6 @@ with tabs[6]:
             img = array_to_pil(arr, cmap=default_cmap, norm=norm)
             buf = save_image_pil(img, fmt=out_format, dpi=dpi)
             st.download_button(f"Download {out_format}", data=buf, file_name=f"{file}.{out_format.lower()}")
-✅ Important fixes:
 # ====================== MAIN ======================
 if __name__ == "__main__" and st is not None:
     build_streamlit_ui()
