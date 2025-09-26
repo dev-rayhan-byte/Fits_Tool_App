@@ -150,7 +150,7 @@ def build_streamlit_ui():
         except Exception:
             st.write("Logo not found")
     with col2:
-        st.title("Streamlit FITS Tool 🔭")
+        st.title("Streamlit FITS Tool [RAYsi]")
         st.markdown("**KARL, BU**")
 
     # ---------------- Sidebar Controls ----------------
