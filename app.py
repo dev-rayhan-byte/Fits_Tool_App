@@ -1,10 +1,4 @@
 # ====================== FITS Converter & Visualizer ======================
-# Run locally:
-#    streamlit run fits_converter_visualizer.py
-# Dependencies:
-#    streamlit, astropy, fitsio, numpy, pandas, pillow, matplotlib, plotly,
-#    scipy, photutils, requests, openpyxl, h5py
-
 import io, os, requests
 from typing import List, Optional
 
@@ -34,11 +28,9 @@ except:
 # ------------------- Utility Functions -------------------
 
 def load_fits_data(path_or_buffer):
-    """Load FITS file and return HDUList (astropy)."""
     try:
         hdul = fits.open(path_or_buffer, memmap=False)
     except Exception:
-        # fallback to fitsio
         try:
             with fitsio.FITS(path_or_buffer) as f:
                 hdul = fits.HDUList()
@@ -96,7 +88,7 @@ def save_image_pil(img: Image.Image, fmt:str='PNG', dpi:int=300, out_path:Option
 
 def build_streamlit_ui():
     st.set_page_config(page_title="FITS Converter & Visualizer [RAYsi]", layout="wide")
-    
+
     # Header
     col1, col2 = st.columns([1,6])
     with col1:
@@ -111,9 +103,7 @@ def build_streamlit_ui():
 
     # ------------------- SIDEBAR -------------------
     st.sidebar.title("Controls")
-
     uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
-
     fits_url = st.sidebar.text_input("FITS file URL")
     if st.sidebar.button("Download FITS") and fits_url:
         try:
@@ -126,16 +116,13 @@ def build_streamlit_ui():
 
     # ------------------- Visualization & Processing Options -------------------
     general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
-
     with general_tab:
         show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
         default_cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
         default_stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0)
-
     with processing_tab:
         enable_bgsub = st.checkbox("Background subtraction")
         enable_denoise = st.checkbox("Noise reduction (Gaussian)")
-
     with export_tab:
         out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
         dpi = st.number_input("DPI", 72, 1200, 300)
@@ -157,7 +144,7 @@ Dr. Md. Khorshed Alam (Supervisor)
     tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
     st.session_state.setdefault('loaded', {})
 
-    # --- Upload Tab ---
+    # ------------------- Upload Tab -------------------
     with tabs[0]:
         st.subheader("Uploaded FITS Files")
         if uploaded:
@@ -172,39 +159,39 @@ Dr. Md. Khorshed Alam (Supervisor)
         else:
             st.info("Upload FITS files via drag-and-drop or URL.")
 
-    # --- Metadata Tab ---
+    # ------------------- Metadata Tab -------------------
     with tabs[1]:
         st.subheader("FITS Header & Metadata")
         if st.session_state['loaded']:
-            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()))
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='meta_file')
             hdul = st.session_state['loaded'][file]
-            hdu_idx = st.selectbox("Select HDU", list(range(len(hdul))))
+            hdu_idx = st.selectbox("Select HDU", list(range(len(hdul))), key='meta_hdu')
             hdr = hdul[hdu_idx].header
             st.dataframe(header_to_dataframe(hdr), use_container_width=True)
             missing = validate_fits_keywords(hdr)
             if missing: st.warning(f"Missing keywords: {missing}")
             else: st.success("All required keywords present.")
 
-    # --- Visualization Tab ---
+    # ------------------- Visualization Tab -------------------
     with tabs[2]:
         st.subheader("Image Viewer")
         if st.session_state['loaded']:
-            file = st.selectbox("Select file (viewer)", list(st.session_state['loaded'].keys()), key='viz')
+            file = st.selectbox("Select file (viewer)", list(st.session_state['loaded'].keys()), key='viz_file')
             hdul = st.session_state['loaded'][file]
             img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
             if img_hdus:
-                hdu_idx = st.selectbox("Image HDU", img_hdus)
+                hdu_idx = st.selectbox("Image HDU", img_hdus, key='viz_hdu')
                 arr = np.array(hdul[hdu_idx].data)
-                if arr.ndim>2: arr=arr[0]
-                stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0)
-                percentile = st.slider("Percentile", 90.0, 100.0, 99.5)
-                cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
-                rotate = int(st.selectbox("Rotate", ["0","90","180","270"], index=0))
+                if arr.ndim>2: arr = arr[0]
+                stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0, key='viz_stretch')
+                percentile = st.slider("Percentile", 90.0, 100.0, 99.5, key='viz_percent')
+                cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0, key='viz_cmap')
+                rotate = int(st.selectbox("Rotate", ["0","90","180","270"], index=0, key='viz_rotate'))
                 if enable_bgsub: arr -= np.nanmedian(arr)
                 if enable_denoise: arr = gaussian_filter(arr, sigma=1)
                 arr = np.rot90(arr, k=rotate//90)
                 norm = normalize_image(arr, stretch=stretch, percent=percentile)
-                
+
                 fig, ax = plt.subplots(figsize=(6,6))
                 if show_wcs:
                     try:
@@ -222,85 +209,83 @@ Dr. Md. Khorshed Alam (Supervisor)
             else:
                 st.warning("No image HDUs available.")
 
-    # ------------------- Continue other tabs (Histogram, RGB, Photometry, Export) ---
-    # You can continue your previous code here as before.
-    # ----------------- HISTOGRAM -----------------
-with tabs[3]:
-    st.subheader("Histogram")
-    if st.session_state['loaded']:
-        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='hist_file')
-        hdul = st.session_state['loaded'][file]
-        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
-        if img_hdus:
-            hdu_idx = img_hdus[0]
-            arr = np.array(hdul[hdu_idx].data)
-            if arr.ndim>2: arr = arr[0]
-            fig, ax = plt.subplots()
-            ax.hist(arr.flatten(), bins=256, color='gray')
-            ax.set_title(f"Histogram: {file} [HDU {hdu_idx}]")
-            ax.set_xlabel("Pixel Value")
-            ax.set_ylabel("Count")
-            st.pyplot(fig)
-
-# ----------------- RGB COMPOSITE -----------------
-with tabs[4]:
-    st.subheader("RGB Composite from 3 FITS files")
-    files = st.multiselect("Select 3 FITS files", list(st.session_state['loaded'].keys()), key='rgb_files')
-    if len(files) == 3:
-        arrs = []
-        for f in files:
-            hdul = st.session_state['loaded'][f]
+    # ------------------- Histogram Tab -------------------
+    with tabs[3]:
+        st.subheader("Histogram")
+        if st.session_state['loaded']:
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='hist_file')
+            hdul = st.session_state['loaded'][file]
             img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
-            arr = np.array(hdul[img_hdus[0]].data)
-            if arr.ndim>2: arr = arr[0]
-            arrs.append((arr - np.nanmin(arr)) / (np.nanmax(arr) - np.nanmin(arr)))
-        rgb = np.dstack(arrs)
-        fig, ax = plt.subplots(figsize=(6,6))
-        ax.imshow(rgb, origin='lower')
-        ax.set_title("RGB Composite")
-        ax.axis('off')
-        st.pyplot(fig)
-    else:
-        st.info("Select exactly 3 FITS files.")
+            if img_hdus:
+                arr = np.array(hdul[img_hdus[0]].data)
+                if arr.ndim>2: arr = arr[0]
+                fig, ax = plt.subplots()
+                ax.hist(arr.flatten(), bins=256, color='gray')
+                ax.set_title(f"Histogram: {file} [HDU {img_hdus[0]}]")
+                ax.set_xlabel("Pixel Value")
+                ax.set_ylabel("Count")
+                st.pyplot(fig)
 
-# ----------------- APERTURE PHOTOMETRY -----------------
-with tabs[5]:
-    st.subheader("Aperture Photometry")
-    if CircularAperture is None:
-        st.warning("photutils not installed. Aperture photometry disabled.")
-    elif st.session_state['loaded']:
-        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='phot_file')
-        hdul = st.session_state['loaded'][file]
-        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
-        if img_hdus:
-            arr = np.array(hdul[img_hdus[0]].data)
-            if arr.ndim>2: arr = arr[0]
-            x = st.number_input("X", 0, arr.shape[1]-1, int(arr.shape[1]/2))
-            y = st.number_input("Y", 0, arr.shape[0]-1, int(arr.shape[0]/2))
-            r = st.number_input("Radius", 1, min(arr.shape)//2, 5)
-            aperture = CircularAperture((x,y), r)
-            phot_table = aperture_photometry(arr, aperture)
-            st.write(phot_table)
+    # ------------------- RGB Composite Tab -------------------
+    with tabs[4]:
+        st.subheader("RGB Composite from 3 FITS files")
+        files = st.multiselect("Select 3 FITS files", list(st.session_state['loaded'].keys()), key='rgb_files')
+        if len(files) == 3:
+            arrs = []
+            for f in files:
+                hdul = st.session_state['loaded'][f]
+                img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+                arr = np.array(hdul[img_hdus[0]].data)
+                if arr.ndim>2: arr = arr[0]
+                arrs.append((arr - np.nanmin(arr)) / (np.nanmax(arr) - np.nanmin(arr)))
+            rgb = np.dstack(arrs)
             fig, ax = plt.subplots(figsize=(6,6))
-            ax.imshow(arr, origin='lower', cmap='gray')
-            aperture.plot(color='red', lw=1.5, ax=ax)
-            ax.set_title("Aperture Photometry")
+            ax.imshow(rgb, origin='lower')
+            ax.set_title("RGB Composite")
+            ax.axis('off')
             st.pyplot(fig)
+        else:
+            st.info("Select exactly 3 FITS files.")
 
-# ----------------- EXPORT -----------------
-with tabs[6]:
-    st.subheader("Export Images")
-    if st.session_state['loaded']:
-        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='export_file')
-        hdul = st.session_state['loaded'][file]
-        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
-        if img_hdus:
-            arr = np.array(hdul[img_hdus[0]].data)
-            if arr.ndim>2: arr = arr[0]
-            norm = normalize_image(arr)
-            img = array_to_pil(arr, cmap=default_cmap, norm=norm)
-            buf = save_image_pil(img, fmt=out_format, dpi=dpi)
-            st.download_button(f"Download {out_format}", data=buf, file_name=f"{file}.{out_format.lower()}")
+    # ------------------- Aperture Photometry Tab -------------------
+    with tabs[5]:
+        st.subheader("Aperture Photometry")
+        if CircularAperture is None:
+            st.warning("photutils not installed. Aperture photometry disabled.")
+        elif st.session_state['loaded']:
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='phot_file')
+            hdul = st.session_state['loaded'][file]
+            img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+            if img_hdus:
+                arr = np.array(hdul[img_hdus[0]].data)
+                if arr.ndim>2: arr = arr[0]
+                x = st.number_input("X", 0, arr.shape[1]-1, int(arr.shape[1]/2))
+                y = st.number_input("Y", 0, arr.shape[0]-1, int(arr.shape[0]/2))
+                r = st.number_input("Radius", 1, min(arr.shape)//2, 5)
+                aperture = CircularAperture((x,y), r)
+                phot_table = aperture_photometry(arr, aperture)
+                st.write(phot_table)
+                fig, ax = plt.subplots(figsize=(6,6))
+                ax.imshow(arr, origin='lower', cmap='gray')
+                aperture.plot(color='red', lw=1.5, ax=ax)
+                ax.set_title("Aperture Photometry")
+                st.pyplot(fig)
+
+    # ------------------- Export Tab -------------------
+    with tabs[6]:
+        st.subheader("Export Images")
+        if st.session_state['loaded']:
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='export_file')
+            hdul = st.session_state['loaded'][file]
+            img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+            if img_hdus:
+                arr = np.array(hdul[img_hdus[0]].data)
+                if arr.ndim>2: arr = arr[0]
+                norm = normalize_image(arr)
+                img = array_to_pil(arr, cmap=default_cmap, norm=norm)
+                buf = save_image_pil(img, fmt=out_format, dpi=dpi)
+                st.download_button(f"Download {out_format}", data=buf, file_name=f"{file}.{out_format.lower()}")
+
 # ====================== MAIN ======================
 if __name__ == "__main__" and st is not None:
     build_streamlit_ui()
