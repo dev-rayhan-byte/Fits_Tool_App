@@ -137,20 +137,20 @@ def build_streamlit_ui():
     st.title("Streamlit FITS Tool ")
 
    import streamlit as st
-from PIL import Image
+    from PIL import Image
 
 # --- HEADER / LOGO ---
-st.set_page_config(page_title="Streamlit FITS Tool", layout="wide")
-col1, col2 = st.columns([1,5])
+    st.set_page_config(page_title="Streamlit FITS Tool", layout="wide")
+    col1, col2 = st.columns([1,5])
 
-with col1:
+    with col1:
     try:
         logo = Image.open("logo.png")  # make sure logo.png is in your app directory
         st.image(logo, width=100)
     except Exception:
         st.write("Logo not found")
 
-with col2:
+    with col2:
     st.title("Streamlit FITS Tool 🔭")
     st.markdown("**KARL, BU**")  # optional subtitle
 
