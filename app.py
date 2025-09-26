@@ -143,7 +143,7 @@ def build_streamlit_ui():
     tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
     st.session_state.setdefault('loaded', {})
 
-       # Authors in sidebar
+    # Authors in sidebar
       st.sidebar.markdown("---")
       st.sidebar.markdown("**Authors & Contributors:**")
       st.sidebar.markdown("""
