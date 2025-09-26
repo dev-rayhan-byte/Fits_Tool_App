@@ -263,4 +263,11 @@ def build_streamlit_ui():
             file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='export')
             hdul = st.session_state['loaded'].get(file)
             if hdul:
-                img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and
+                img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+                if img_hdus:
+                    hdu_idx = st.selectbox("HDU", img_hdus, key='export_hdu')
+                    arr = np.array(hdul[hdu_idx].data)
+                    if arr.ndim>2: arr=arr[0]
+                    img = array_to_pil(arr, cmap=default_cmap, norm=normalize_image(arr, stretch=default_stretch))
+                    buf = save_image_pil(img, fmt=out_format, dpi=dpi)
+                    st.download_button("Download Image", buf, file_name=f"{file}_HDU{hdu_idx}.{out_format.lower()}")
