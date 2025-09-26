@@ -145,7 +145,7 @@ def build_streamlit_ui():
 
     with col1:
     try:
-        logo = Image.open("logo.png")  # make sure logo.png is in your app directory
+        logo = Image.open("https://github.com/dev-rayhan-byte/Fits_Tool_App/blob/c77e6e8ceaeb990e91a8dc2ceeb2124794e275ff/Asset%204.png")  # make sure logo.png is in your app directory
         st.image(logo, width=100)
     except Exception:
         st.write("Logo not found")
