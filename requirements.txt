@@ -1,0 +1,29 @@
+# Core
+streamlit>=1.39
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.9
+Pillow>=10.3
+
+# FITS handling
+astropy>=6.1
+fitsio>=1.2.3
+
+# Visualization / UI
+plotly>=5.23
+bokeh>=3.5
+
+# Image processing
+scipy>=1.14
+opencv-python-headless>=4.10
+
+# Export
+openpyxl>=3.1
+h5py>=3.12
+
+# Optional: photometry / astronomy extras
+photutils>=1.11   # (for aperture photometry, source detection)
+
+# Optional: API
+fastapi>=0.115
+uvicorn[standard]>=0.30
