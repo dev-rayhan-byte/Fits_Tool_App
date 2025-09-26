@@ -126,7 +126,38 @@ def build_streamlit_ui():
 
      # Visualization & processing options
     general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
-    
+    # Visualization & processing options
+general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
+
+with general_tab:
+    show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
+    default_cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
+    default_stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0)
+
+with processing_tab:
+    enable_bgsub = st.checkbox("Background subtraction")
+    enable_denoise = st.checkbox("Noise reduction (Gaussian)")
+
+with export_tab:
+    out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
+    dpi = st.number_input("DPI", 72, 1200, 300)
+
+tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
+st.session_state.setdefault('loaded', {})
+
+# Authors in sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Authors & Contributors:**")
+st.sidebar.markdown("""
+Rayhan Miah (App Developer)  
+Israt Jahan Powsi (App Developer)  
+Al Amin (QC Test)  
+Pranto Das (QC Test)  
+Abdul Hafiz Tamim (Image processing Dev)  
+Shahariar Emon (Domain Expert)  
+Dr. Md. Khorshed Alam (Supervisor)
+""")
+
     with general_tab:
         show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
         default_cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
