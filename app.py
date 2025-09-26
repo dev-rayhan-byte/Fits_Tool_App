@@ -5,7 +5,7 @@
 #    streamlit, astropy, fitsio, numpy, pandas, pillow, matplotlib, plotly,
 #    scipy, photutils, requests, openpyxl, h5py
 
-import io, os, argparse, requests
+import io, os, requests
 from typing import List, Optional
 
 import numpy as np
@@ -25,14 +25,6 @@ try:
     import streamlit as st
 except:
     st = None
-
-try:
-    from fastapi import FastAPI, File, UploadFile
-    from fastapi.responses import StreamingResponse
-    import uvicorn
-except:
-    FastAPI = None
-    StreamingResponse = None
 
 try:
     from photutils import CircularAperture, aperture_photometry
@@ -258,7 +250,6 @@ Dr. Md. Khorshed Alam (Supervisor)
             for hdul in [hdul_r, hdul_g, hdul_b]:
                 img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
                 arr = np.array(hdul[img_hdus[0]].data)
-                if arr
                 if arr.ndim > 2: arr = arr[0]
                 arrs.append(arr)
             
@@ -318,20 +309,8 @@ Dr. Md. Khorshed Alam (Supervisor)
                 buf = save_image_pil(img, fmt=out_format, dpi=dpi)
                 st.download_button(f"Download {out_format}", data=buf, file_name=f"{file}.{out_format.lower()}")
 
-    # ------------------- FOOTER -------------------
-    st.markdown("---")
-    st.markdown("**Authors & Contributors:**")
-    st.markdown("""
-Rayhan Miah (App Developer)  
-Israt Jahan Powsi (App Developer)  
-Al Amin (QC Test)  
-Pranto Das (QC Test)  
-Abdul Hafiz Tamim (Image processing Dev)  
-Shahariar Emon (Domain Expert)  
-Dr. Md. Khorshed Alam (Supervisor)
-""")
+
 
 # ====================== MAIN ======================
 if __name__ == "__main__" and st is not None:
     build_streamlit_ui()
-
