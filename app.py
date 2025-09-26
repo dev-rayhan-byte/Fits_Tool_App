@@ -50,9 +50,11 @@ except Exception:
 # Only import FastAPI when required to avoid extra deps for UI users
 try:
     from fastapi import FastAPI, File, UploadFile
+    from fastapi.responses import StreamingResponse
     import uvicorn
 except Exception:
     FastAPI = None
+    StreamingResponse = None
 
 # ------------------------- Utility functions -------------------------
 
@@ -79,12 +81,49 @@ def load_fits_data(path_or_buffer):
 
 
 def header_to_dataframe(header: fits.Header) -> pd.DataFrame:
+    """Convert an astropy Header into a pandas DataFrame.
+
+    This is robust to different astropy versions where header.comments
+    is not a plain dict. It also preserves COMMENT/HISTORY fields.
+    """
     rows = []
-    for k, v in header.items():
-        if k == 0:
-            # COMMENT / HISTORY entries have numeric keys in astropy mapping
-            continue
-        rows.append({"keyword": str(k), "value": str(v), "comment": header.comments.get(k, "")})
+    # Use header.cards to preserve order and capture COMMENT/HISTORY entries
+    try:
+        for card in header.cards:
+            key = card.keyword
+            # astropy uses '' for blank keywords in COMMENT/HISTORY cards
+            if key is None or key == '':
+                # represent COMMENT/HISTORY as special rows
+                rows.append({
+                    "keyword": card.keyword if card.keyword is not None else "(COMMENT/HISTORY)",
+                    "value": str(card.value),
+                    "comment": card.comment if card.comment is not None else "",
+                })
+                continue
+            # Normal keyword
+            comment = ""
+            try:
+                comment = header.comments[key]
+            except Exception:
+                # header.comments may not behave like a dict in some astropy versions
+                try:
+                    comment = card.comment or ""
+                except Exception:
+                    comment = ""
+            rows.append({"keyword": str(key), "value": str(card.value), "comment": comment})
+    except Exception:
+        # Fallback: older astropy where header.cards might not exist
+        for k, v in header.items():
+            comment = ""
+            try:
+                comment = header.comments[k]
+            except Exception:
+                try:
+                    # some Header implementations allow dict-like access
+                    comment = header.get_comment(k)
+                except Exception:
+                    comment = ""
+            rows.append({"keyword": str(k), "value": str(v), "comment": comment})
     return pd.DataFrame(rows)
 
 
@@ -325,7 +364,7 @@ def build_streamlit_ui():
             st.download_button("Download ZIP", data=out_zip_buf, file_name="converted_images.zip", mime='application/zip')
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("Made with ❤️ for astronomers — supports FITS metadata, visualization, conversion, and basic processing.")
+    st.sidebar.caption("Made with  for astronomers — supports FITS metadata, visualization, conversion, and basic processing.")
 
 # ------------------------- Headless CLI functions -------------------------
 
