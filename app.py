@@ -49,9 +49,7 @@ try:
 except Exception:
     FastAPI = None
     StreamingResponse = None
-
 # ------------------------- Utility functions -------------------------
-
 def load_fits_data(path_or_buffer):
     """Load FITS file and return HDUList (astropy)."""
     try:
@@ -136,28 +134,67 @@ def save_image_pil(img: Image.Image, fmt: str = 'PNG', dpi: int = 300, out_path:
 
 def build_streamlit_ui():
     st.set_page_config(page_title="Streamlit FITS Tool", layout="wide")
+    st.title("Streamlit FITS Tool ")
+
+   import streamlit as st
+from PIL import Image
+
+# --- HEADER / LOGO ---
+st.set_page_config(page_title="Streamlit FITS Tool", layout="wide")
+col1, col2 = st.columns([1,5])
+
+with col1:
+    try:
+        logo = Image.open("logo.png")  # make sure logo.png is in your app directory
+        st.image(logo, width=100)
+    except Exception:
+        st.write("Logo not found")
+
+with col2:
     st.title("Streamlit FITS Tool 🔭")
+    st.markdown("**KARL, BU**")  # optional subtitle
 
-    # Sidebar controls
-    st.sidebar.title("Controls")
-    uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
-    general_tab, processing_tab, export_tab = st.sidebar.tabs(["General", "Processing", "Export"])
+# ---------------- Sidebar Controls ----------------
+st.sidebar.title("Controls")
+uploaded = st.sidebar.file_uploader(
+    "Upload FITS files",
+    type=['fits','fit','fts'],
+    accept_multiple_files=True
+)
 
-    with general_tab:
-        show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
-        default_cmap = st.selectbox("Default colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
-        default_stretch = st.selectbox("Default stretch", ["linear","log","sqrt","asinh"], index=0)
-    with processing_tab:
-        enable_bgsub = st.checkbox("Background subtraction (median)")
-        enable_denoise = st.checkbox("Noise reduction (gaussian)")
-    with export_tab:
-        out_format = st.selectbox("Export image format", ["PNG","TIFF","JPEG"], index=0)
-        dpi = st.number_input("DPI for export", 72, 1200, 300)
+general_tab, processing_tab, export_tab = st.sidebar.tabs(["General", "Processing", "Export"])
 
-    tabs = st.tabs(["Upload","Metadata","Visualization","Processing","Export"])
+with general_tab:
+    show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
+    default_cmap = st.selectbox("Default colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
+    default_stretch = st.selectbox("Default stretch", ["linear","log","sqrt","asinh"], index=0)
 
-    if 'loaded' not in st.session_state:
-        st.session_state['loaded'] = {}
+with processing_tab:
+    enable_bgsub = st.checkbox("Background subtraction (median)")
+    enable_denoise = st.checkbox("Noise reduction (gaussian)")
+
+with export_tab:
+    out_format = st.selectbox("Export image format", ["PNG","TIFF","JPEG"], index=0)
+    dpi = st.number_input("DPI for export", 72, 1200, 300)
+
+tabs = st.tabs(["Upload","Metadata","Visualization","Processing","Export"])
+
+if 'loaded' not in st.session_state:
+    st.session_state['loaded'] = {}
+
+# ---------------- FOOTER / AUTHOR LIST ----------------
+st.markdown("---")
+st.markdown("**Authors & Contributors:**")
+st.markdown("""
+1. Rayhan Miah (App Developer)  
+2. Israt Jahan Powsi (App Developer)  
+3. Al Amin (QC Test)  
+4. Pranto Das (QC Test)  
+5. Abdul Hafiz Tamim (Image processing Dev)  
+6. Shahariar Emon (Domain Expert)  
+7. Dr. Md. Khorshed Alam (Supervisor)
+""")
+
 
     # UPLOAD
     with tabs[0]:
@@ -234,7 +271,6 @@ def build_streamlit_ui():
                 st.warning("No image HDUs to export.")
 
 # ------------------------- Main entry -------------------------
-
 def main():
     parser = argparse.ArgumentParser(description="Streamlit FITS Tool")
     parser.add_argument("--cli-convert", action="store_true", help="CLI batch convert FITS to images")
