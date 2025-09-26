@@ -1,55 +1,47 @@
-"""
-Streamlit FITS Tool - app.py
-A single-file Streamlit application implementing FITS upload, visualization,
-metadata tools, conversion, basic processing, CLI batch conversion, and
-an optional FastAPI REST endpoint for programmatic access.
+# ====================== FITS Converter & Visualizer ======================
+# Run locally:
+#    streamlit run fits_converter_visualizer.py
+# Dependencies:
+#    streamlit, astropy, fitsio, numpy, pandas, pillow, matplotlib, plotly,
+#    scipy, photutils, requests, openpyxl, h5py
 
-Run locally for interactive UI:
-    streamlit run streamlit_fits_tool_app.py
-
-CLI examples (headless batch conversion):
-    python streamlit_fits_tool_app.py --cli-convert --input files/*.fits --outdir out --format png --dpi 300
-
-Run REST API server (separate from Streamlit):
-    python streamlit_fits_tool_app.py --api --host 0.0.0.0 --port 8000
-
-Dependencies (pip):
-    streamlit astropy fitsio numpy pandas pillow matplotlib plotly
-    scipy opencv-python openpyxl h5py fastapi uvicorn
-"""
-
-import io
-import os
-import sys
-import glob
-import argparse
+import io, os, sys, argparse
 from typing import List, Optional
-
 import numpy as np
+import pandas as pd
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.visualization import (PercentileInterval, AsinhStretch,
                                    LogStretch, SqrtStretch, LinearStretch,
                                    ImageNormalize)
 import fitsio
-import pandas as pd
-from PIL import Image
 import matplotlib.pyplot as plt
+from PIL import Image
 
-# Streamlit and optional FastAPI
+# Optional: Streamlit & FastAPI
 try:
     import streamlit as st
-except Exception:
+except:
     st = None
 
 try:
     from fastapi import FastAPI, File, UploadFile
     from fastapi.responses import StreamingResponse
     import uvicorn
-except Exception:
+except:
     FastAPI = None
     StreamingResponse = None
-# ------------------------- Utility functions -------------------------
+
+try:
+    from photutils import CircularAperture, aperture_photometry
+except:
+    CircularAperture = None
+
+import requests
+from scipy.ndimage import gaussian_filter
+
+# ------------------- Utility Functions -------------------
+
 def load_fits_data(path_or_buffer):
     """Load FITS file and return HDUList (astropy)."""
     try:
@@ -63,7 +55,7 @@ def load_fits_data(path_or_buffer):
                     h = f[i]
                     hdr = fits.Header()
                     hdr.update(h.read_header())
-                    data = h.read() if h.get_exttype() == 'IMAGE' else None
+                    data = h.read() if h.get_exttype()=='IMAGE' else None
                     hdu = fits.PrimaryHDU(data=data, header=hdr)
                     hdul.append(hdu)
         except Exception as e:
@@ -71,147 +63,103 @@ def load_fits_data(path_or_buffer):
     return hdul
 
 def header_to_dataframe(header: fits.Header) -> pd.DataFrame:
-    """Convert an astropy Header into a pandas DataFrame."""
     rows = []
-    try:
-        for card in header.cards:
-            key = card.keyword or "(COMMENT/HISTORY)"
-            rows.append({
-                "keyword": key,
-                "value": str(card.value),
-                "comment": card.comment if card.comment else "",
-            })
-    except Exception:
-        for k, v in header.items():
-            try:
-                comment = header.comments.get(k, "")
-            except Exception:
-                comment = ""
-            rows.append({"keyword": str(k), "value": str(v), "comment": comment})
+    for card in header.cards:
+        key = card.keyword or "(COMMENT/HISTORY)"
+        rows.append({"keyword": key, "value": str(card.value), "comment": card.comment or ""})
     return pd.DataFrame(rows)
 
-def validate_fits_keywords(header: fits.Header, required_keywords: List[str] = None) -> List[str]:
+def validate_fits_keywords(header: fits.Header, required_keywords: List[str]=None) -> List[str]:
     if required_keywords is None:
-        required_keywords = ["SIMPLE", "BITPIX", "NAXIS", "TELESCOP", "DATE-OBS"]
-    missing = [k for k in required_keywords if k not in header]
-    return missing
+        required_keywords = ["SIMPLE","BITPIX","NAXIS","TELESCOP","DATE-OBS"]
+    return [k for k in required_keywords if k not in header]
 
-def normalize_image(data: np.ndarray, stretch: str = "linear", percent: float = 99.5):
+def normalize_image(data: np.ndarray, stretch:str="linear", percent:float=99.5):
     arr = np.array(data, dtype=np.float32)
-    interval = PercentileInterval(percent)
-    vmin, vmax = interval.get_limits(arr)
-    stretch_map = {
-        "linear": LinearStretch(),
-        "log": LogStretch(),
-        "sqrt": SqrtStretch(),
-        "asinh": AsinhStretch()
-    }
-    norm = ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_map.get(stretch, LinearStretch()))
-    return norm
+    vmin,vmax = PercentileInterval(percent).get_limits(arr)
+    stretch_map = {"linear":LinearStretch(),"log":LogStretch(),"sqrt":SqrtStretch(),"asinh":AsinhStretch()}
+    return ImageNormalize(vmin=vmin, vmax=vmax, stretch=stretch_map.get(stretch, LinearStretch()))
 
-def array_to_pil(arr: np.ndarray, cmap: str = "gray", norm=None) -> Image.Image:
-    fig = plt.figure(figsize=(4, 4), dpi=100)
+def array_to_pil(arr: np.ndarray, cmap:str="gray", norm=None) -> Image.Image:
+    fig = plt.figure(figsize=(4,4), dpi=100)
     ax = fig.add_subplot(111)
     ax.axis('off')
     ax.imshow(arr, cmap=cmap, norm=norm, origin='lower')
     fig.canvas.draw()
-    w, h = fig.canvas.get_width_height()
-    buf = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8).reshape((h, w, 4))
-    buf = buf[:, :, [1,2,3,0]]  # ARGB -> RGBA
+    w,h = fig.canvas.get_width_height()
+    buf = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8).reshape((h,w,4))
+    buf = buf[:,:, [1,2,3,0]]
     plt.close(fig)
     return Image.fromarray(buf)
 
-def save_image_pil(img: Image.Image, fmt: str = 'PNG', dpi: int = 300, out_path: Optional[str] = None):
+def save_image_pil(img: Image.Image, fmt:str='PNG', dpi:int=300, out_path:Optional[str]=None):
     if out_path:
-        img.save(out_path, format=fmt.upper(), dpi=(dpi, dpi))
+        img.save(out_path, format=fmt.upper(), dpi=(dpi,dpi))
         return out_path
     buf = io.BytesIO()
-    img.save(buf, format=fmt.upper(), dpi=(dpi, dpi))
+    img.save(buf, format=fmt.upper(), dpi=(dpi,dpi))
     buf.seek(0)
     return buf
 
-# ------------------------- Streamlit UI -------------------------
+# ------------------- Streamlit UI -------------------
 
 def build_streamlit_ui():
-    import streamlit as st
-    from PIL import Image
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from scipy.ndimage import gaussian_filter
-
-    # --- HEADER / LOGO ---
-    st.set_page_config(page_title="Streamlit FITS Tool", layout="wide")
+    st.set_page_config(page_title="FITS Converter & Visualizer", layout="wide")
     
-    col1, col2 = st.columns([1, 5])
+    # Header
+    col1, col2 = st.columns([1,6])
     with col1:
         try:
-            logo = Image.open("Asset 4.png")  # local logo
+            logo = Image.open("Asset 4.png")
             st.image(logo, width=100)
-        except Exception:
+        except:
             st.write("Logo not found")
     with col2:
-        st.title("Streamlit FITS Tool [RAYsi]")
+        st.title("FITS Converter & Visualizer 🔭")
         st.markdown("**KARL, BU**")
 
-    # ---------------- Sidebar Controls ----------------
+    # Sidebar: Controls
     st.sidebar.title("Controls")
-    uploaded = st.sidebar.file_uploader(
-        "Upload FITS files",
-        type=['fits','fit','fts'],
-        accept_multiple_files=True
-    )
     
-    general_tab, processing_tab, export_tab = st.sidebar.tabs(["General", "Processing", "Export"])
+    # Upload
+    uploaded = st.sidebar.file_uploader("Upload FITS files", type=['fits','fit','fts'], accept_multiple_files=True)
+
+    # URL download
+    st.sidebar.markdown("### Download FITS from URL")
+    fits_url = st.sidebar.text_input("FITS file URL")
+    if st.sidebar.button("Download FITS"):
+        if fits_url:
+            try:
+                response = requests.get(fits_url)
+                response.raise_for_status()
+                filename = fits_url.split("/")[-1]
+                st.session_state.setdefault('loaded', {})[filename] = load_fits_data(io.BytesIO(response.content))
+                st.success(f"Downloaded and loaded {filename}")
+            except Exception as e:
+                st.error(f"Failed to download: {e}")
+
+    # Visualization & processing options
+    general_tab, processing_tab, export_tab = st.sidebar.tabs(["General","Processing","Export"])
     
     with general_tab:
         show_wcs = st.checkbox("Show WCS Grid / RA/Dec", True)
-        default_cmap = st.selectbox(
-            "Default colormap",
-            ["gray","viridis","inferno","magma","plasma","cividis"],
-            index=0
-        )
-        default_stretch = st.selectbox(
-            "Default stretch",
-            ["linear","log","sqrt","asinh"],
-            index=0
-        )
+        default_cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
+        default_stretch = st.selectbox("Stretch", ["linear","log","sqrt","asinh"], index=0)
     
     with processing_tab:
-        enable_bgsub = st.checkbox("Background subtraction (median)")
-        enable_denoise = st.checkbox("Noise reduction (gaussian)")
+        enable_bgsub = st.checkbox("Background subtraction")
+        enable_denoise = st.checkbox("Noise reduction (Gaussian)")
     
     with export_tab:
-        out_format = st.selectbox(
-            "Export image format",
-            ["PNG","TIFF","JPEG"],
-            index=0
-        )
-        dpi = st.number_input("DPI for export", 72, 1200, 300)
-    
-    tabs = st.tabs(["Upload","Metadata","Visualization","Processing","Export"])
-    
-    if 'loaded' not in st.session_state:
-        st.session_state['loaded'] = {}
+        out_format = st.selectbox("Export format", ["PNG","TIFF","JPEG"], index=0)
+        dpi = st.number_input("DPI", 72, 1200, 300)
 
-    # ---------------- FOOTER / AUTHOR LIST ----------------
-    st.markdown("---")
-    st.markdown("**Authors & Contributors:**")
-    st.markdown("""
-    1. Rayhan Miah (App Developer)  
-    2. Israt Jahan Powsi (App Developer)  
-    3. Al Amin (QC Test)  
-    4. Pranto Das (QC Test)  
-    5. Abdul Hafiz Tamim (Image processing Dev)  
-    6. Shahariar Emon (Domain Expert)  
-    7. Dr. Md. Khorshed Alam (Supervisor)
-    """)
+    tabs = st.tabs(["Upload","Metadata","Visualization","Histogram","RGB Composite","Aperture Photometry","Export"])
+    st.session_state.setdefault('loaded', {})
 
-
-
-
-    # UPLOAD
+    # ------------------- UPLOAD TAB -------------------
     with tabs[0]:
-        st.subheader("Uploaded Files")
+        st.subheader("Uploaded FITS Files")
         if uploaded:
             for f in uploaded:
                 st.write(f"**{f.name}** — {f.type or 'file'} — {f.size} bytes")
@@ -222,13 +170,13 @@ def build_streamlit_ui():
                     except Exception as e:
                         st.error(f"Failed {f.name}: {e}")
         else:
-            st.info("Upload FITS files in sidebar.")
+            st.info("Upload FITS files via drag-and-drop or URL.")
 
-    # METADATA
+    # ------------------- METADATA TAB -------------------
     with tabs[1]:
         st.subheader("FITS Header & Metadata")
         if st.session_state['loaded']:
-            file = st.selectbox("Select file", options=list(st.session_state['loaded'].keys()))
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()))
             hdul = st.session_state['loaded'][file]
             hdu_idx = st.selectbox("Select HDU", list(range(len(hdul))))
             hdr = hdul[hdu_idx].header
@@ -237,7 +185,7 @@ def build_streamlit_ui():
             if missing: st.warning(f"Missing keywords: {missing}")
             else: st.success("All required keywords present.")
 
-    # VISUALIZATION
+    # ------------------- VISUALIZATION TAB -------------------
     with tabs[2]:
         st.subheader("Image Viewer")
         if st.session_state['loaded']:
@@ -253,51 +201,110 @@ def build_streamlit_ui():
                 cmap = st.selectbox("Colormap", ["gray","viridis","inferno","magma","plasma","cividis"], index=0)
                 rotate = int(st.selectbox("Rotate", ["0","90","180","270"], index=0))
                 if enable_bgsub: arr -= np.nanmedian(arr)
-                if enable_denoise:
-                    from scipy.ndimage import gaussian_filter
-                    arr = gaussian_filter(arr, sigma=1)
+                if enable_denoise: arr = gaussian_filter(arr, sigma=1)
                 arr = np.rot90(arr, k=rotate//90)
                 norm = normalize_image(arr, stretch=stretch, percent=percentile)
+                
                 fig, ax = plt.subplots(figsize=(6,6))
+                if show_wcs:
+                    try:
+                        wcs = WCS(hdul[hdu_idx].header)
+                        ax = plt.subplot(projection=wcs)
+                        ax.coords.grid(True, color='white', ls='dotted')
+                        ax.set_xlabel('RA')
+                        ax.set_ylabel('Dec')
+                    except:
+                        pass
                 ax.imshow(arr, origin='lower', cmap=cmap, norm=norm)
                 ax.set_title(f"{file} [HDU {hdu_idx}]")
                 ax.axis('off')
                 st.pyplot(fig)
             else:
-                st.warning("No image HDUs available for visualization.")
+                st.warning("No image HDUs available.")
 
-    # EXPORT
+    # ------------------- HISTOGRAM TAB -------------------
+    with tabs[3]:
+        st.subheader("Histogram & Interactive Stretch")
+        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='hist')
+        hdul = st.session_state['loaded'][file]
+        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+        if img_hdus:
+            hdu_idx = st.selectbox("Image HDU", img_hdus, key='hist_hdu')
+            arr = np.array(hdul[hdu_idx].data)
+            if arr.ndim>2: arr=arr[0]
+            fig, ax = plt.subplots()
+            ax.hist(arr.flatten(), bins=256, color='gray')
+            ax.set_title(f"Histogram: {file} [HDU {hdu_idx}]")
+            st.pyplot(fig)
+
+    # ------------------- RGB COMPOSITE TAB -------------------
     with tabs[4]:
-        st.subheader("Export FITS HDU as Image")
-        if st.session_state['loaded']:
-            file = st.selectbox("File to export", list(st.session_state['loaded'].keys()), key='export')
+        st.subheader("RGB Composite from 3 FITS files")
+        files = st.multiselect("Select 3 FITS files", list(st.session_state['loaded'].keys()))
+        if len(files)==3:
+            hdul_r, hdul_g, hdul_b = [st.session_state['loaded'][f] for f in files]
+            arrs = []
+            for hdul in [hdul_r, hdul_g, hdul_b]:
+                img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+                arr = np.array(hdul[img_hdus[0]].data)
+                if arr.ndim>2: arr=arr[0]
+                arrs.append((arr-np.nanmin(arr))/(np.nanmax(arr)-np.nanmin(arr)))
+            rgb = np.dstack(arrs)
+            st.image((rgb*255).astype(np.uint8), caption="RGB Composite", use_column_width=True)
+        else:
+            st.info("Select exactly 3 FITS files.")
+
+    # ------------------- APERTURE PHOTOMETRY TAB -------------------
+    with tabs[5]:
+        st.subheader("Aperture Photometry")
+        if CircularAperture is None:
+            st.warning("Install photutils to use aperture photometry")
+        else:
+            file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='phot')
             hdul = st.session_state['loaded'][file]
             img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
             if img_hdus:
-                hdu_idx = st.selectbox("Select HDU", img_hdus, key='export_hdu')
+                hdu_idx = st.selectbox("HDU", img_hdus, key='phot_hdu')
                 arr = np.array(hdul[hdu_idx].data)
-                if arr.ndim>2: arr = arr[0]
-                img = array_to_pil(arr, cmap=default_cmap, norm=normalize_image(arr, stretch=default_stretch))
-                buf = save_image_pil(img, fmt=out_format, dpi=dpi)
-                st.download_button("Download Image", buf, file_name=f"{file}_HDU{hdu_idx}.{out_format.lower()}")
-            else:
-                st.warning("No image HDUs to export.")
+                if arr.ndim>2: arr=arr[0]
+                x = st.number_input("Aperture X", 0, arr.shape[1]-1, arr.shape[1]//2)
+                y = st.number_input("Aperture Y", 0, arr.shape[0]-1, arr.shape[0]//2)
+                r = st.number_input("Radius", 1, min(arr.shape)//2, 5)
+                aperture = CircularAperture((x,y), r=r)
+                phot_table = aperture_photometry(arr, aperture)
+                st.write(phot_table)
 
-# ------------------------- Main entry -------------------------
+    # ------------------- EXPORT TAB -------------------
+    with tabs[6]:
+        st.subheader("Export FITS HDU as Image")
+        file = st.selectbox("Select file", list(st.session_state['loaded'].keys()), key='export')
+        hdul = st.session_state['loaded'][file]
+        img_hdus = [i for i,h in enumerate(hdul) if getattr(h,'data',None) is not None and h.data.ndim>=2]
+        if img_hdus:
+            hdu_idx = st.selectbox("HDU", img_hdus, key='export_hdu')
+            arr = np.array(hdul[hdu_idx].data)
+            if arr.ndim>2: arr=arr[0]
+            img = array_to_pil(arr, cmap=default_cmap, norm=normalize_image(arr, stretch=default_stretch))
+            buf = save_image_pil(img, fmt=out_format, dpi=dpi)
+            st.download_button("Download Image", buf, file_name=f"{file}_HDU{hdu_idx}.{out_format.lower()}")
+
+# ------------------- Main Entry -------------------
+
 def main():
-    parser = argparse.ArgumentParser(description="Streamlit FITS Tool")
+    parser = argparse.ArgumentParser(description="FITS Converter & Visualizer")
     parser.add_argument("--cli-convert", action="store_true", help="CLI batch convert FITS to images")
     parser.add_argument("--input", nargs="+", help="Input FITS files")
-    parser.add_argument("--outdir", default=".", help="Output directory for images")
-    parser.add_argument("--format", default="png", help="Image format PNG/TIFF/JPEG")
-    parser.add_argument("--dpi", type=int, default=300, help="Image DPI")
-    parser.add_argument("--api", action="store_true", help="Start FastAPI REST server")
-    parser.add_argument("--host", default="127.0.0.1", help="API host")
-    parser.add_argument("--port", type=int, default=8000, help="API port")
+    parser.add_argument("--outdir", default=".", help="Output directory")
+    parser.add_argument("--format", default="png", help="Output format")
+    parser.add_argument("--dpi", type=int, default=300, help="DPI")
+    parser.add_argument("--api", action="store_true", help="Start REST API")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
+    # CLI conversion
     if args.cli_convert:
-        if not args.input: raise RuntimeError("No input files provided for CLI conversion")
+        if not args.input: raise RuntimeError("No input files for CLI")
         os.makedirs(args.outdir, exist_ok=True)
         for f in args.input:
             hdul = load_fits_data(f)
@@ -311,9 +318,9 @@ def main():
                     print(f"Saved {out_path}")
         return
 
+    # REST API
     if args.api:
-        if FastAPI is None:
-            raise RuntimeError("FastAPI not installed.")
+        if FastAPI is None: raise RuntimeError("FastAPI not installed")
         app = FastAPI()
         @app.post("/upload_fits/")
         async def upload_fits(file: UploadFile = File(...)):
@@ -331,7 +338,6 @@ def main():
         uvicorn.run(app, host=args.host, port=args.port)
         return
 
-    # Streamlit UI
     if st:
         build_streamlit_ui()
     else:
